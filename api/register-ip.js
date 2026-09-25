@@ -11,25 +11,61 @@ function validIp(ip) {
     /^[0-9a-fA-F:.]+$/.test(ip);
 }
 
-async function lookupIp(ip) {
-  const response = await fetch(
-    `https://ipapi.co/${encodeURIComponent(ip)}/json/`,
-    {
-      headers: { "Accept": "application/json" }
-    }
-  );
+async function lookupIp2Location(ip) {
+  const apiKey = process.env.IP2LOCATION_API_KEY;
 
-  if (!response.ok) {
-    throw new Error(`IP geolocation falhou (${response.status}).`);
-  }
+  // IP2Location.io also supports keyless lookups with a limited daily quota.
+  const headers = { Accept: "application/json" };
+  if (apiKey) headers.Authorization = `Bearer ${apiKey}`;
 
-  const data = await response.json();
+  const url =
+    `https://api.ip2location.io/?ip=${encodeURIComponent(ip)}&format=json`;
 
-  if (data.error) {
-    throw new Error(data.reason || "IP geolocation não disponível.");
+  const response = await fetch(url, { headers });
+  const raw = await response.text();
+
+  let data;
+  try { data = raw ? JSON.parse(raw) : {}; }
+  catch { data = { raw }; }
+
+  if (!response.ok || data?.error) {
+    const message =
+      data?.error?.error_message ||
+      data?.error?.message ||
+      data?.message ||
+      data?.raw ||
+      `HTTP ${response.status}`;
+    throw new Error(`IP2Location.io: ${message}`);
   }
 
   return data;
+}
+
+function makeDetails(geo) {
+  const lines = [
+    `Cidade: ${geo.city_name || "N/D"}`,
+    `Estado/Região: ${geo.region_name || "N/D"}`,
+    `País: ${geo.country_name || "N/D"}`,
+    `Código do país: ${geo.country_code || "N/D"}`,
+    `CEP: ${geo.zip_code || "N/D"}`,
+    `Latitude: ${geo.latitude ?? "N/D"}`,
+    `Longitude: ${geo.longitude ?? "N/D"}`,
+    `Timezone: ${geo.time_zone || geo.time_zone_info?.olson || "N/D"}`,
+    `ASN: ${geo.asn || geo.as_info?.as_number || "N/D"}`,
+    `AS: ${geo.as || geo.as_info?.as_name || "N/D"}`,
+    `ISP: ${geo.isp || "N/D"}`,
+    `Domínio: ${geo.domain || geo.as_info?.as_domain || "N/D"}`,
+    `Tipo de uso: ${geo.usage_type || geo.as_info?.as_usage_type || "N/D"}`,
+    `Velocidade/rede: ${geo.net_speed || "N/D"}`,
+    `Operadora móvel: ${geo.mobile_brand || "N/D"}`,
+    `MCC: ${geo.mcc || "N/D"}`,
+    `MNC: ${geo.mnc || "N/D"}`,
+    `Proxy: ${typeof geo.is_proxy === "boolean" ? (geo.is_proxy ? "SIM" : "NÃO") : "N/D"}`
+  ];
+
+  if (geo.district) lines.splice(1, 0, `Distrito: ${geo.district}`);
+
+  return lines.join("\n");
 }
 
 async function createBaserowRow(payload) {
@@ -65,47 +101,35 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: "IP inválido." });
   }
 
+  let geo = null;
+  let geoError = null;
+
   try {
-    const geo = await lookupIp(ip);
+    geo = await lookupIp2Location(ip);
+  } catch (error) {
+    geoError = error?.message || "Falha de geolocalização.";
+    console.error("IP2Location:", geoError);
+  }
 
-    const details = [
-      `Cidade: ${geo.city || "N/D"}`,
-      `Estado/Região: ${geo.region || "N/D"}`,
-      `UF/Código região: ${geo.region_code || "N/D"}`,
-      `País: ${geo.country_name || geo.country || "N/D"}`,
-      `Código país: ${geo.country_code || geo.country || "N/D"}`,
-      `CEP: ${geo.postal || "N/D"}`,
-      `Latitude: ${geo.latitude ?? "N/D"}`,
-      `Longitude: ${geo.longitude ?? "N/D"}`,
-      `Timezone: ${geo.timezone || "N/D"}`,
-      `ASN: ${geo.asn || "N/D"}`,
-      `Provedor/Organização: ${geo.org || "N/D"}`
-    ].join("\n");
+  const details = geo
+    ? makeDetails(geo)
+    : `Geolocalização indisponível: ${geoError}`;
 
-    const payload = {
-      IP: ip,
-      Date: new Date().toISOString().slice(0, 10),
-      details
-    };
+  const payload = {
+    IP: ip,
+    Date: new Date().toISOString().slice(0, 10),
+    details
+  };
 
+  try {
     let result = await createBaserowRow(payload);
 
-    // Se Date estiver configurado de forma incompatível, preserva IP + details.
+    // Se o tipo da coluna Date for incompatível, preserva IP + details.
     if (!result.ok && result.status === 400) {
-      console.error("Baserow primeira tentativa:", result.body);
       const retry = await createBaserowRow({ IP: ip, details });
-
       if (retry.ok) {
-        return res.status(201).json({
-          ok: true,
-          rowId: retry.body?.id,
-          city: geo.city || null,
-          region: geo.region || null,
-          country: geo.country_name || null,
-          warning: "Registro criado sem Date."
-        });
+        result = retry;
       }
-      result = retry;
     }
 
     if (!result.ok) {
@@ -119,12 +143,19 @@ export default async function handler(req, res) {
     return res.status(201).json({
       ok: true,
       rowId: result.body?.id,
-      city: geo.city || null,
-      region: geo.region || null,
-      country: geo.country_name || null
+      geolocation: geo ? {
+        city: geo.city_name || null,
+        region: geo.region_name || null,
+        country: geo.country_name || null,
+        zip: geo.zip_code || null,
+        latitude: geo.latitude ?? null,
+        longitude: geo.longitude ?? null,
+        isp: geo.isp || null,
+        asn: geo.asn || null
+      } : null,
+      geolocationError: geoError
     });
   } catch (error) {
-    console.error(error);
     return res.status(500).json({
       error: error?.message || "Erro interno."
     });

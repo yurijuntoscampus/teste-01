@@ -11,4 +11,4 @@ export const BASEROW_TABLE_ID =
   process.env.BASEROW_TABLE_ID || "1221352";
 
 export const BASEROW_TABLE_NAME =
-  process.env.BASEROW_TABLE_NAME || "detalhe";
+  process.env.BASEROW_TABLE_NAME || "1221352";

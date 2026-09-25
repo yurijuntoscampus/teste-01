@@ -7,8 +7,6 @@ export const BASEROW_TOKEN =
 export const BASEROW_BASE_URL =
   process.env.BASEROW_BASE_URL || "https://api.baserow.io";
 
-export const BASEROW_TABLE_ID =
-  process.env.BASEROW_TABLE_ID || "1221352";
-
+export const BASEROW_TABLE_ID = "1221352";
 export const BASEROW_TABLE_NAME =
-  process.env.BASEROW_TABLE_NAME || "1221352";
+  process.env.BASEROW_TABLE_NAME || "detalhe";

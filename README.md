@@ -97,3 +97,17 @@ Alterações:
 - O JSON de erro agora retorna `baserowStatus` e `baserowError` para diagnóstico.
 - O erro 404 de favicon foi removido com favicon vazio inline.
 - Table ID permanece fixo em `1221352`.
+
+
+## V3 — correção definitiva do Table ID
+
+O erro real retornado pelo Baserow foi:
+
+`URL /api/database/rows/table/detalhe/ not found.`
+
+Isso prova que o deployment estava usando `detalhe` como `BASEROW_TABLE_ID`.
+Nesta versão o ID foi fixado diretamente no backend:
+
+`1221352`
+
+A variável de ambiente `BASEROW_TABLE_ID` é ignorada por esta versão.

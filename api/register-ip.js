@@ -117,7 +117,7 @@ export default async function handler(req, res) {
 
   const payload = {
     IP: ip,
-    Date: new Date().toISOString().slice(0, 10),
+    Date: new Date().toISOString(),
     details
   };
 

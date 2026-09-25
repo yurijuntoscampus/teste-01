@@ -10,3 +10,6 @@ export const BASEROW_BASE_URL =
 export const BASEROW_TABLE_ID = "1221352";
 export const BASEROW_TABLE_NAME =
   process.env.BASEROW_TABLE_NAME || "detalhe";
+
+export const IP2LOCATION_API_KEY =
+  process.env.IP2LOCATION_API_KEY || "619FD8B4B77497A241953C4D61BB963B";

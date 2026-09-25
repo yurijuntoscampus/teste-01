@@ -1,68 +1,8 @@
 import {
   BASEROW_TOKEN,
   BASEROW_BASE_URL,
-  BASEROW_TABLE_ID,
-  BASEROW_TABLE_NAME
+  BASEROW_TABLE_ID
 } from "./_config.js";
-
-let cachedTableId = null;
-
-function normalizeTables(data) {
-  if (Array.isArray(data)) return data;
-  if (data && Array.isArray(data.results)) return data.results;
-  if (data && Array.isArray(data.tables)) return data.tables;
-  return [];
-}
-
-async function resolveTableId() {
-  if (BASEROW_TABLE_ID) return String(BASEROW_TABLE_ID);
-  if (cachedTableId) return cachedTableId;
-
-  const response = await fetch(
-    `${BASEROW_BASE_URL}/api/database/tables/all-tables/`,
-    {
-      method: "GET",
-      headers: {
-        Authorization: `Token ${BASEROW_TOKEN}`,
-        "Content-Type": "application/json"
-      }
-    }
-  );
-
-  if (!response.ok) {
-    const detail = await response.text();
-    console.error("Baserow table discovery:", response.status, detail);
-    throw new Error(
-      "Não foi possível descobrir automaticamente a tabela no Baserow."
-    );
-  }
-
-  const data = await response.json();
-  const tables = normalizeTables(data);
-
-  if (!tables.length) {
-    throw new Error("Nenhuma tabela acessível foi encontrada para esse token.");
-  }
-
-  const expected = BASEROW_TABLE_NAME.trim().toLowerCase();
-
-  const exact = tables.find(
-    table => String(table.name || "").trim().toLowerCase() === expected
-  );
-
-  // Se o token só tiver acesso a uma tabela, usamos essa tabela como fallback.
-  const selected = exact || (tables.length === 1 ? tables[0] : null);
-
-  if (!selected?.id) {
-    throw new Error(
-      `Tabela "${BASEROW_TABLE_NAME}" não encontrada. ` +
-      "Defina BASEROW_TABLE_ID no servidor."
-    );
-  }
-
-  cachedTableId = String(selected.id);
-  return cachedTableId;
-}
 
 function validIp(ip) {
   return (
@@ -73,10 +13,48 @@ function validIp(ip) {
   );
 }
 
+async function createBaserowRow(payload) {
+  const url =
+    `${BASEROW_BASE_URL}/api/database/rows/table/` +
+    `${encodeURIComponent(BASEROW_TABLE_ID)}/?user_field_names=true`;
+
+  const response = await fetch(url, {
+    method: "POST",
+    headers: {
+      Authorization: `Token ${BASEROW_TOKEN}`,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify(payload)
+  });
+
+  const raw = await response.text();
+
+  let body = null;
+  try {
+    body = raw ? JSON.parse(raw) : null;
+  } catch {
+    body = raw;
+  }
+
+  return {
+    ok: response.ok,
+    status: response.status,
+    body
+  };
+}
+
 export default async function handler(req, res) {
   if (req.method !== "POST") {
     res.setHeader("Allow", "POST");
     return res.status(405).json({ error: "Method not allowed" });
+  }
+
+  if (!BASEROW_TOKEN) {
+    return res.status(500).json({ error: "BASEROW_TOKEN não configurado." });
+  }
+
+  if (!BASEROW_TABLE_ID) {
+    return res.status(500).json({ error: "BASEROW_TABLE_ID não configurado." });
   }
 
   const { ip } = req.body || {};
@@ -86,48 +64,61 @@ export default async function handler(req, res) {
   }
 
   try {
-    const tableId = await resolveTableId();
+    // Coluna Date do Baserow pode estar configurada como "date only".
+    // Portanto usamos YYYY-MM-DD, que é aceito nesse tipo de campo.
+    const today = new Date().toISOString().slice(0, 10);
 
-    // Campos confirmados pelo CSV anexado:
-    // id, Name, Notes, Active, IP, Date, details
-    //
-    // Gravamos somente os dois campos necessários.
     const payload = {
       IP: ip,
-      Date: new Date().toISOString()
+      Date: today
     };
 
-    const response = await fetch(
-      `${BASEROW_BASE_URL}/api/database/rows/table/${encodeURIComponent(tableId)}/?user_field_names=true`,
-      {
-        method: "POST",
-        headers: {
-          Authorization: `Token ${BASEROW_TOKEN}`,
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify(payload)
-      }
-    );
+    let result = await createBaserowRow(payload);
 
-    if (!response.ok) {
-      const detail = await response.text();
-      console.error("Baserow create row:", response.status, detail);
+    // Se o campo Date estiver configurado de outra maneira, não perdemos
+    // o registro do IP: tentamos novamente somente com o IP.
+    if (!result.ok && result.status === 400) {
+      console.error(
+        "Primeira tentativa Baserow falhou:",
+        JSON.stringify(result.body)
+      );
+
+      const retry = await createBaserowRow({ IP: ip });
+
+      if (retry.ok) {
+        return res.status(201).json({
+          ok: true,
+          rowId: retry.body?.id,
+          tableId: BASEROW_TABLE_ID,
+          warning: "IP registrado, mas o campo Date rejeitou o formato.",
+          dateFieldError: result.body
+        });
+      }
+
+      result = retry;
+    }
+
+    if (!result.ok) {
+      console.error(
+        "Baserow recusou o registro:",
+        result.status,
+        JSON.stringify(result.body)
+      );
 
       return res.status(502).json({
         error: "O Baserow recusou o registro.",
-        status: response.status
+        baserowStatus: result.status,
+        baserowError: result.body
       });
     }
 
-    const row = await response.json();
-
     return res.status(201).json({
       ok: true,
-      rowId: row.id,
-      tableId
+      rowId: result.body?.id,
+      tableId: BASEROW_TABLE_ID
     });
   } catch (error) {
-    console.error(error);
+    console.error("Erro interno:", error);
 
     return res.status(500).json({
       error: error?.message || "Erro interno."

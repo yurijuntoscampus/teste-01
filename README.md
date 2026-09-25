@@ -86,3 +86,14 @@ Identificadores:
 - View ID: `2426603`
 
 O backend agora usa diretamente `TABLE_ID=1221352`, sem depender da descoberta automática da tabela.
+
+
+## V2 - correção do erro 502
+
+Alterações:
+
+- `Date` agora é enviado como `YYYY-MM-DD`.
+- Se `Date` ainda for rejeitado com HTTP 400, o endpoint tenta automaticamente registrar apenas `IP`.
+- O JSON de erro agora retorna `baserowStatus` e `baserowError` para diagnóstico.
+- O erro 404 de favicon foi removido com favicon vazio inline.
+- Table ID permanece fixo em `1221352`.

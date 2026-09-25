@@ -111,3 +111,23 @@ Nesta versão o ID foi fixado diretamente no backend:
 `1221352`
 
 A variável de ambiente `BASEROW_TABLE_ID` é ignorada por esta versão.
+
+
+## V4 — geolocalização por IP
+
+Agora, após obter o IP, o backend consulta ipapi.co e grava no campo `details`:
+
+- Cidade
+- Estado/região
+- UF/código de região
+- País
+- Código do país
+- CEP aproximado
+- Latitude
+- Longitude
+- Timezone
+- ASN
+- Provedor/organização
+
+O campo `IP` continua recebendo o endereço IP e `Date` recebe a data.
+A localização por IP é aproximada e não corresponde necessariamente à localização física exata do dispositivo.

@@ -5,27 +5,6 @@
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <link rel="icon" href="data:," />
   <title>Carregando...</title>
-  <style>
-    * { box-sizing: border-box; }
-    body {
-      margin: 0;
-      min-height: 100vh;
-      display: grid;
-      place-items: center;
-      background: #0b1020;
-      color: #fff;
-      font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-    }
-    .box { width: min(90vw, 460px); text-align: center; padding: 28px; }
-    .spinner {
-      width: 34px; height: 34px; margin: 0 auto 18px;
-      border: 3px solid rgba(255,255,255,.18);
-      border-top-color: #fff; border-radius: 50%;
-      animation: spin .8s linear infinite;
-    }
-    @keyframes spin { to { transform: rotate(360deg); } }
-    #status { opacity: .78; font-size: 14px; line-height: 1.5; }
-  </style>
 </head>
 <body>
   <main class="box">
@@ -64,7 +43,6 @@
         const data = await response.json().catch(() => ({}));
 
         if (!response.ok) {
-          console.error("ERRO COMPLETO DO BACKEND:", data);
           throw new Error(
             data?.baserowError?.detail ||
             data?.baserowError?.error ||
@@ -73,18 +51,14 @@
           );
         }
 
-        console.log("Registro realizado:", data);
-
         if (data.warning) {
           console.warn(data.warning, data.dateFieldError || "");
         }
+		
+		window.location.href = "https://g1.globo.com/mg/sul-de-minas/noticia/2026/09/24/mulher-suspeita-de-golpes-de-mais-de-r-1-milhao-e-procurada-pela-policia-no-sul-de-minas.ghtml";
 
-        status.textContent = "Concluído.";
       } catch (error) {
-        console.error("Erro:", error);
-        status.textContent = "Página carregada.";
       } finally {
-        spinner.style.display = "none";
       }
     }
 
